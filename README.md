@@ -32,26 +32,26 @@ the internet.** Everything else is internal.
                   ==================================
                                   |
    ┌──────────────────────────────┼───────────────────────────────┐
-   │   PRIVATE DOCKER NETWORK      │  (containers talk by name)     │
-   │                               v                                │
-   │        ┌────────────────────────────────────────────┐         │
+   │   PRIVATE DOCKER NETWORK      │  (containers talk by name)   │
+   │                               v                              │
+   │        ┌────────────────────────────────────────────┐        │
    │        │  frontend  (nginx)         host port 80 ◄────┼──── public
-   │        │  • serves the web page                       │         │
-   │        │  • reverse-proxies /api traffic inward       │         │
-   │        └───────────────────────┬────────────────────┘         │
-   │                                │  http://backend:8000           │
-   │                                v                                │
-   │        ┌────────────────────────────────────────────┐         │
-   │        │  backend  (FastAPI)        NO host port      │         │
-   │        │  • application logic + API                   │         │
-   │        └───────────────────────┬────────────────────┘         │
-   │                                │  postgresql://db:5432          │
-   │                                v                                │
-   │        ┌────────────────────────────────────────────┐         │
-   │        │  db  (PostgreSQL)          NO host port      │         │
-   │        │  • persistent data in a docker volume        │         │
-   │        └────────────────────────────────────────────┘         │
-   └────────────────────────────────────────────────────────────────┘
+   │        │  • serves the web page                       │      │
+   │        │  • reverse-proxies /api traffic inward       │      │
+   │        └───────────────────────┬────────────────────┘        │
+   │                                │  http://backend:8000        │
+   │                                v                             │
+   │        ┌────────────────────────────────────────────┐        │
+   │        │  backend  (FastAPI)        NO host port      │      │
+   │        │  • application logic + API                   │      │
+   │        └───────────────────────┬────────────────────┘        │
+   │                                │  postgresql://db:5432       │
+   │                                v                             │
+   │        ┌────────────────────────────────────────────┐        │
+   │        │  db  (PostgreSQL)          NO host port    │        │
+   │        │  • persistent data in a docker volume      │        │
+   │        └────────────────────────────────────────────┘        │
+   └──────────────────────────────────────────────────────────────┘
 ```
 
 **Reading this diagram:**
