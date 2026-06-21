@@ -42,8 +42,8 @@ the internet.** Everything else is internal.
    │                                │  http://backend:8000        │
    │                                v                             │
    │        ┌────────────────────────────────────────────┐        │
-   │        │  backend  (FastAPI)        NO host port      │      │
-   │        │  • application logic + API                   │      │
+   │        │  backend  (FastAPI)        NO host port    │        │
+   │        │  • application logic + API                 │        │
    │        └───────────────────────┬────────────────────┘        │
    │                                │  postgresql://db:5432       │
    │                                v                             │
