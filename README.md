@@ -32,8 +32,8 @@ the internet.** Everything else is internal.
                   ==================================
                                   |
    ┌──────────────────────────────┼───────────────────────────────┐
-   │   PRIVATE DOCKER NETWORK     │  (containers talk by name)   │
-   │                              v                              │
+   │   PRIVATE DOCKER NETWORK     │  (containers talk by name)    │
+   │                              v                               │
    │        ┌──────────────────────────────────────────────┐      │
    │        │  frontend  (nginx)         host port 80 ◄────┼──── public
    │        │  • serves the web page                       │      │
