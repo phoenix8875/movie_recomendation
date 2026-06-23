@@ -90,7 +90,7 @@ server; really it's hitting nginx, which quietly relays it inward.
 **What's happening, step by step:**
 - The browser loads the page from nginx over **port 80** (public).
 - When the page makes an API call, it goes to the **same port 80**, because the
-  frontend uses relative URLs (more on this below).
+  frontend uses relative URLs .
 - nginx looks at the path. `/` → serve a file. `/auth`, `/movies`, `/watchlist`
   → forward to the backend.
 - The forwarded request travels the **private network** to `backend:8000`. This
