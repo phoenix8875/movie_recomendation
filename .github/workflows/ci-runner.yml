@@ -1,0 +1,53 @@
+name: CI Runner (test branch)
+
+# WHEN: any push to the ci-runner branch, or a manual trigger from the
+# Actions tab. It deliberately does NOT run on main, so your real images
+# are never rebuilt by this experimental pipeline.
+on:
+  push:
+    branches: [ci-runner]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    # build both images from one definition; runs once per service in parallel
+    strategy:
+      matrix:
+        service:
+          - name: backend
+            image: raj8875/movie-recommender-backend
+          - name: frontend
+            image: raj8875/movie-recommender-frontend
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push ${{ matrix.service.name }}
+        uses: docker/build-push-action@v6
+        with:
+          context: ./${{ matrix.service.name }}    # backend/ and frontend/ each hold a Dockerfile
+          push: true
+          # ci-vN auto-increments every run (run_number: 1, 2, 3 ...).
+          # SEPARATE tag namespace from your real :2.0 / :latest images.
+          tags: |
+            ${{ matrix.service.image }}:ci-v${{ github.run_number }}
+            ${{ matrix.service.image }}:ci-latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Show what was pushed
+        run: |
+          echo "Pushed ${{ matrix.service.image }}:ci-v${{ github.run_number }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "(and :ci-latest)" >> "$GITHUB_STEP_SUMMARY"
