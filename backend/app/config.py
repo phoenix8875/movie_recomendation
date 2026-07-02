@@ -1,9 +1,7 @@
 import os
 
-DATABASE_URL = os.getenv(
-    "DATABASE_URL",
-    "postgresql://movieuser:moviepass@localhost:5432/moviedb",
-)
+
+DATABASE_URL = os.environ["DATABASE_URL"]  # crashes clearly if not set
 
 # In production, set this via environment variable / secret — never hardcode.
 JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "dev-secret-change-me")
