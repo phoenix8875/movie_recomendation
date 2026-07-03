@@ -5,6 +5,11 @@ on:
     branches: [main]
   workflow_dispatch:
 
+# security-events: write lets us upload Trivy's SARIF to the Security tab.
+permissions:
+  contents: read
+  security-events: write
+
 env:
   BACKEND_IMAGE: raj8875/movie-recommender-backend
   FRONTEND_IMAGE: raj8875/movie-recommender-frontend
@@ -14,18 +19,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       # --------------------------------------------------------------
-      # 1. Checkout + derive the short commit tag
+      # 1. Checkout + short commit tag
       # --------------------------------------------------------------
       - name: Checkout app repo
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0        # Sonar wants full history for accurate reporting
+          fetch-depth: 0
 
       - name: Compute short SHA
         run: echo "SHORT_SHA=$(echo ${GITHUB_SHA} | cut -c1-7)" >> "$GITHUB_ENV"
 
       # --------------------------------------------------------------
-      # 2. Lint + test (gate: a failing test stops the pipeline)
+      # 2. Lint + test
       # --------------------------------------------------------------
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -40,7 +45,7 @@ jobs:
 
       - name: Lint (ruff)
         working-directory: ./backend
-        run: ruff check . || true       # report only, don't fail build yet
+        run: ruff check . || true
 
       - name: Run tests (pytest)
         working-directory: ./backend
@@ -50,7 +55,8 @@ jobs:
         run: pytest -q
 
       # --------------------------------------------------------------
-      # 3. SonarCloud quality scan
+      # 3. SonarCloud scan (waits for Quality Gate; FAILS build if red,
+      #    because sonar.qualitygate.wait=true is in sonar-project.properties)
       # --------------------------------------------------------------
       - name: SonarCloud Scan
         uses: sonarsource/sonarqube-scan-action@v6
@@ -58,7 +64,7 @@ jobs:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
       # --------------------------------------------------------------
-      # 4. Build + push both images, tagged with the commit SHA
+      # 4. Build + push both images (only reached if gate passed)
       # --------------------------------------------------------------
       - name: Log in to Docker Hub
         uses: docker/login-action@v3
@@ -70,7 +76,6 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Build & push backend
-
         uses: docker/build-push-action@v6
         with:
           context: ./backend
@@ -89,19 +94,31 @@ jobs:
           cache-to: type=gha,mode=max
 
       # --------------------------------------------------------------
-      # 5. Trivy: scan the built backend image for vulnerabilities
-      #    (report only - never fails the build while learning)
+      # 5. Trivy scan -> SARIF -> Security tab + downloadable artifact
       # --------------------------------------------------------------
-      - name: Trivy scan (backend image)
+      - name: Trivy scan (backend image) -> SARIF
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: ${{ env.BACKEND_IMAGE }}:${{ env.SHORT_SHA }}
-          format: table
-          exit-code: "0"          # 0 = report and continue; set 1 later to block
+          format: sarif
+          output: trivy-backend.sarif
           severity: HIGH,CRITICAL
+          exit-code: "0"          # report only; doesn't fail the build
+
+      - name: Upload Trivy results to Security tab
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-backend.sarif
+          category: trivy-backend
+
+      - name: Upload Trivy report as downloadable artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-backend-report
+          path: trivy-backend.sarif
 
       # --------------------------------------------------------------
-      # 6. Deploy trigger: write the new tag into the HELM repo & push
+      # 6. Deploy trigger: write new tag into HELM repo & push
       # --------------------------------------------------------------
       - name: Checkout helm repo
         uses: actions/checkout@v4
