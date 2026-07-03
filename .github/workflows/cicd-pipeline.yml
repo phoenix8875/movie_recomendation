@@ -1,1 +1,121 @@
+name: CI/CD Pipeline
 
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  BACKEND_IMAGE: raj8875/movie-recommender-backend
+  FRONTEND_IMAGE: raj8875/movie-recommender-frontend
+
+jobs:
+  pipeline:
+    runs-on: ubuntu-latest
+    steps:
+      # --------------------------------------------------------------
+      # 1. Checkout + derive the short commit tag
+      # --------------------------------------------------------------
+      - name: Checkout app repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0        # Sonar wants full history for accurate reporting
+
+      - name: Compute short SHA
+        run: echo "SHORT_SHA=$(echo ${GITHUB_SHA} | cut -c1-7)" >> "$GITHUB_ENV"
+
+      # --------------------------------------------------------------
+      # 2. Lint + test (gate: a failing test stops the pipeline)
+      # --------------------------------------------------------------
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install backend deps + tools
+        working-directory: ./backend
+        run: |
+          pip install -r requirements.txt
+          pip install ruff pytest
+
+      - name: Lint (ruff)
+        working-directory: ./backend
+        run: ruff check . || true       # report only, don't fail build yet
+
+      - name: Run tests (pytest)
+        working-directory: ./backend
+        run: pytest -q
+
+      # --------------------------------------------------------------
+      # 3. SonarCloud quality scan
+      # --------------------------------------------------------------
+      - name: SonarCloud Scan
+        uses: SonarSource/sonarqube-scan-action@v5
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
+      # --------------------------------------------------------------
+      # 4. Build + push both images, tagged with the commit SHA
+      # --------------------------------------------------------------
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build & push backend
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          push: true
+          tags: ${{ env.BACKEND_IMAGE }}:${{ env.SHORT_SHA }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build & push frontend
+        uses: docker/build-push-action@v6
+        with:
+          context: ./frontend
+          push: true
+          tags: ${{ env.FRONTEND_IMAGE }}:${{ env.SHORT_SHA }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # --------------------------------------------------------------
+      # 5. Trivy: scan the built backend image for vulnerabilities
+      #    (report only - never fails the build while learning)
+      # --------------------------------------------------------------
+      - name: Trivy scan (backend image)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: ${{ env.BACKEND_IMAGE }}:${{ env.SHORT_SHA }}
+          format: table
+          exit-code: "0"          # 0 = report and continue; set 1 later to block
+          severity: HIGH,CRITICAL
+
+      # --------------------------------------------------------------
+      # 6. Deploy trigger: write the new tag into the HELM repo & push
+      # --------------------------------------------------------------
+      - name: Checkout helm repo
+        uses: actions/checkout@v4
+        with:
+          repository: phoenix8875/helm-chart-based-deployment
+          token: ${{ secrets.HELM_REPO_TOKEN }}
+          path: helm-repo
+
+      - name: Update image tags in values.yaml
+        run: |
+          cd helm-repo/helm-chart-deployment/movie-watchlist
+          yq -i ".backend.image.tag = \"${SHORT_SHA}\"" values.yaml
+          yq -i ".frontend.image.tag = \"${SHORT_SHA}\"" values.yaml
+          echo "Updated tags to ${SHORT_SHA}:"
+          yq '.backend.image.tag, .frontend.image.tag' values.yaml
+
+      - name: Commit & push the tag bump
+        run: |
+          cd helm-repo
+          git config user.name "ci-bot"
+          git config user.email "ci-bot@users.noreply.github.com"
+          git add helm-chart-deployment/movie-watchlist/values.yaml
+          git commit -m "ci: bump image tags to ${SHORT_SHA}" || echo "no change to commit"
+          git push
