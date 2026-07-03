@@ -1,5 +1,8 @@
 # 🎬 Movie Recommender — Containerized 3-Tier App on AWS
 
+[![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=phoenix8875_movie_recomendation&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=phoenix8875_movie_recomendation)
+[![Vulnerabilities](https://sonarcloud.io/api/project_badges/measure?project=phoenix8875_movie_recomendation&metric=vulnerabilities)](https://sonarcloud.io/summary/new_code?id=phoenix8875_movie_recomendation)
+
 A three-tier application (frontend, backend, database) packaged with Docker,
 wired together with Docker Compose, and deployed on AWS EC2.
 
