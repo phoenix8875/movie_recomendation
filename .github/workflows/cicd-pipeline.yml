@@ -44,6 +44,9 @@ jobs:
 
       - name: Run tests (pytest)
         working-directory: ./backend
+        env:
+          DATABASE_URL: "postgresql://test:test@localhost:5432/testdb"
+          JWT_SECRET_KEY: "test-secret-for-ci-only"
         run: pytest -q
 
       # --------------------------------------------------------------
