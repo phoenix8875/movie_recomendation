@@ -1,37 +1,65 @@
+# ============================================================================
+# CI/CD PIPELINE  —  Movie Recommendation App
+# ----------------------------------------------------------------------------
+# WHAT THIS PIPELINE DOES, END TO END:
+#   1. Runs quality checks (lint + unit tests) on the code
+#   2. Scans the source for code-quality/security issues (SonarQube - SAST)
+#   3. Builds both container images, tagged by commit SHA, pushes to Docker Hub
+#   4. Scans the built image for vulnerable OS/library packages (Trivy)
+#   5. Writes the new image tag into the Helm (GitOps) repo  -> Argo CD deploys it
+#   6. Scans the RUNNING deployed app for web vulnerabilities (OWASP ZAP - DAST)
+#
+# THREE LAYERS OF SECURITY SCANNING, each catching a different class of issue:
+#   SAST  (SonarQube) -> reads the SOURCE CODE            "insecurely written code?"
+#   Image (Trivy)     -> reads the CONTAINER's packages   "known-vulnerable libs?"
+#   DAST  (OWASP ZAP) -> attacks the LIVE RUNNING app     "exploitable at runtime?"
+# ============================================================================
+
 name: CI/CD Pipeline
 
+# ---- WHEN this pipeline runs -----------------------------------------------
 on:
   push:
-    branches: [main]
-  workflow_dispatch:
+    branches: [main]        # every push to main triggers the full pipeline
+  workflow_dispatch:        # ...and a manual "Run workflow" button in the Actions tab
 
-# security-events: write lets us upload Trivy's SARIF to the Security tab.
+# ---- PERMISSIONS granted to the automatic GITHUB_TOKEN ---------------------
+# security-events:write is required so Trivy can upload its SARIF results
+# into GitHub's Security tab. contents:read is enough for checking out code.
 permissions:
   contents: read
   security-events: write
 
+# ---- SHARED VALUES reused across steps -------------------------------------
+# Defined once here so the image names aren't repeated (and typo-prone) below.
 env:
   BACKEND_IMAGE: raj8875/movie-recommender-backend
   FRONTEND_IMAGE: raj8875/movie-recommender-frontend
 
 jobs:
   pipeline:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-latest          # GitHub spins up a fresh throwaway Ubuntu VM
+
     steps:
-      # --------------------------------------------------------------
-      # 1. Checkout + short commit tag
-      # --------------------------------------------------------------
+      # ----------------------------------------------------------------------
+      # STEP 1: Get the application source code onto the runner
+      # ----------------------------------------------------------------------
       - name: Checkout app repo
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 0            # full git history — SonarQube uses it for
+                                    # accurate blame / new-code detection
 
+      # Turn the long 40-char commit hash into a short 7-char string (e.g. a1b2c3d).
+      # Stored in $GITHUB_ENV so EVERY later step can read it as $SHORT_SHA.
+      # This becomes our unique, traceable image tag.
       - name: Compute short SHA
         run: echo "SHORT_SHA=$(echo ${GITHUB_SHA} | cut -c1-7)" >> "$GITHUB_ENV"
 
-      # --------------------------------------------------------------
-      # 2. Lint + test
-      # --------------------------------------------------------------
+      # ----------------------------------------------------------------------
+      # STEP 2: Quality gate — lint + unit tests
+      # A failing test here STOPS the whole pipeline (nothing gets built/shipped).
+      # ----------------------------------------------------------------------
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -40,93 +68,109 @@ jobs:
       - name: Install backend deps + tools
         working-directory: ./backend
         run: |
-          pip install -r requirements.txt
-          pip install ruff pytest
+          pip install -r requirements.txt   # the app's own dependencies
+          pip install ruff pytest           # the lint + test tools
 
       - name: Lint (ruff)
         working-directory: ./backend
-        run: ruff check . || true
+        run: ruff check . || true           # "|| true" = report issues but DON'T
+                                            # fail the build on style yet
 
       - name: Run tests (pytest)
         working-directory: ./backend
         env:
+          # Unit tests import app modules that read these env vars at import time.
+          # These are dummy values just so the import succeeds — the tests never
+          # actually connect to a database (they test pure logic).
           DATABASE_URL: "postgresql://test:test@localhost:5432/testdb"
           JWT_SECRET_KEY: "test-secret-for-ci-only"
-        run: pytest -q
+        run: pytest -q                      # a FAILING test stops the pipeline here
 
-      # --------------------------------------------------------------
-      # 3. SonarCloud scan (waits for Quality Gate; FAILS build if red,
-      #    because sonar.qualitygate.wait=true is in sonar-project.properties)
-      # --------------------------------------------------------------
+      # ----------------------------------------------------------------------
+      # STEP 3: SAST — SonarCloud static code analysis + quality gate
+      # Reads the source code for bugs, code smells, and security hotspots.
+      # sonar.qualitygate.wait=true (set in sonar-project.properties) makes this
+      # step WAIT for SonarCloud's verdict and FAIL the pipeline if the gate is red.
+      # ----------------------------------------------------------------------
       - name: SonarCloud Scan
         uses: sonarsource/sonarqube-scan-action@v6
         env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}   # auth to SonarCloud (repo secret)
 
-      # --------------------------------------------------------------
-      # 4. Build + push both images (only reached if gate passed)
-      # --------------------------------------------------------------
+      # ----------------------------------------------------------------------
+      # STEP 4: Build both container images and push them to Docker Hub
+      # Only reached if lint, tests, AND the Sonar quality gate all passed.
+      # ----------------------------------------------------------------------
       - name: Log in to Docker Hub
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
+      # Buildx enables BuildKit — needed for the layer caching used below.
       - name: Set up Buildx
         uses: docker/setup-buildx-action@v3
 
       - name: Build & push backend
         uses: docker/build-push-action@v6
         with:
-          context: ./backend
-          push: true
-          tags: ${{ env.BACKEND_IMAGE }}:${{ env.SHORT_SHA }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          context: ./backend                        # folder with the backend Dockerfile
+          push: true                                # push to the registry
+          tags: ${{ env.BACKEND_IMAGE }}:${{ env.SHORT_SHA }}   # tag = commit SHA
+          cache-from: type=gha                      # reuse cached layers between runs
+          cache-to: type=gha,mode=max               # (faster builds)
 
       - name: Build & push frontend
         uses: docker/build-push-action@v6
         with:
-          context: ./frontend
+          context: ./frontend                       # folder with the frontend Dockerfile
           push: true
           tags: ${{ env.FRONTEND_IMAGE }}:${{ env.SHORT_SHA }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      # --------------------------------------------------------------
-      # 5. Trivy scan -> SARIF -> Security tab + downloadable artifact
-      # --------------------------------------------------------------
+      # ----------------------------------------------------------------------
+      # STEP 5: Image vulnerability scan (Trivy) -> GitHub Security tab + artifact
+      # Scans the freshly built backend image for known CVEs in OS/Python packages.
+      # ----------------------------------------------------------------------
       - name: Trivy scan (backend image) -> SARIF
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: ${{ env.BACKEND_IMAGE }}:${{ env.SHORT_SHA }}
-          format: sarif
+          format: sarif                # machine-readable format GitHub understands
           output: trivy-backend.sarif
-          severity: HIGH,CRITICAL
-          exit-code: "0"          # report only; doesn't fail the build
+          severity: HIGH,CRITICAL      # only report the serious findings
+          exit-code: "0"               # report only — don't fail the build
 
+      # Upload Trivy findings so they appear in the repo's Security -> Code scanning tab
       - name: Upload Trivy results to Security tab
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: trivy-backend.sarif
           category: trivy-backend
 
+      # Also attach the raw report as a downloadable artifact on the run
       - name: Upload Trivy report as downloadable artifact
         uses: actions/upload-artifact@v4
         with:
           name: trivy-backend-report
           path: trivy-backend.sarif
 
-      # --------------------------------------------------------------
-      # 6. Deploy trigger: write new tag into HELM repo & push
-      # --------------------------------------------------------------
+      # ----------------------------------------------------------------------
+      # STEP 6: DEPLOY TRIGGER (GitOps handoff)
+      # CI does NOT deploy directly. Instead it writes the new image tag into the
+      # separate Helm config repo. Argo CD watches that repo and auto-syncs the
+      # change to the Kubernetes cluster. This git commit IS the deployment.
+      # ----------------------------------------------------------------------
       - name: Checkout helm repo
         uses: actions/checkout@v4
         with:
           repository: phoenix8875/helm-chart-based-deployment
-          token: ${{ secrets.HELM_REPO_TOKEN }}
-          path: helm-repo
+          token: ${{ secrets.HELM_REPO_TOKEN }}   # PAT — lets us push to a DIFFERENT repo
+          path: helm-repo                         # clone it into ./helm-repo
 
+      # Rewrite the image tag values so the chart points at the image we just built.
+      # yq edits YAML in place, targeting the exact keys (safer than sed).
       - name: Update image tags in values.yaml
         run: |
           cd helm-repo/helm-chart-deployment/movie-watchlist
@@ -135,6 +179,7 @@ jobs:
           echo "Updated tags to ${SHORT_SHA}:"
           yq '.backend.image.tag, .frontend.image.tag' values.yaml
 
+      # Commit + push the tag change. THIS is what Argo CD detects and deploys.
       - name: Commit & push the tag bump
         run: |
           cd helm-repo
@@ -143,3 +188,20 @@ jobs:
           git add helm-chart-deployment/movie-watchlist/values.yaml
           git commit -m "ci: bump image tags to ${SHORT_SHA}" || echo "no change to commit"
           git push
+
+      # ----------------------------------------------------------------------
+      # STEP 7: DAST — OWASP ZAP scan of the LIVE deployed application
+      # Unlike SAST/Trivy (which inspect code/images), DAST attacks the running app
+      # over HTTP and reports runtime issues (missing security headers, XSS, etc.).
+      #
+
+      # ----------------------------------------------------------------------
+      - name: Wait for Argo CD to sync the new deployment
+        run: sleep 90   # gives Argo's ~3min poll cycle time to pick up and apply the new ta
+      - name: DAST scan (OWASP ZAP baseline)
+        uses: zaproxy/action-baseline@v0.14.0
+        with:
+          target: "http://13.207.81.246:30080"   # live app at the worker's Elastic IP
+          cmd_options: "-I"                       # -I = don't fail the run on findings
+          allow_issue_writing: false              # don't auto-open GitHub issues
+        continue-on-error: true                   # extra safety: never block on DAST
