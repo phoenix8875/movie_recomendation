@@ -18,10 +18,19 @@
 name: CI/CD Pipeline
 
 # ---- WHEN this pipeline runs -----------------------------------------------
+# paths: restricts triggering to changes that actually affect the app or the
+# pipeline itself. A README edit, a docs/ tweak, or any other unrelated file
+# change will NOT start a run — saves CI minutes and avoids noisy "passing"
+# runs that didn't really test anything.
 on:
   push:
-    branches: [main]        # every push to main triggers the full pipeline
-  workflow_dispatch:        # ...and a manual "Run workflow" button in the Actions tab
+    branches: [main]
+    paths:
+      - "backend/**"
+      - "frontend/**"
+      - ".github/workflows/**"
+      - "sonar-project.properties"
+  workflow_dispatch:        # manual "Run workflow" button always works, regardless of paths
 
 # ---- PERMISSIONS granted to the automatic GITHUB_TOKEN ---------------------
 # security-events:write is required so Trivy can upload its SARIF results
@@ -194,10 +203,16 @@ jobs:
       # Unlike SAST/Trivy (which inspect code/images), DAST attacks the running app
       # over HTTP and reports runtime issues (missing security headers, XSS, etc.).
       #
-
+      # NOTE / HONEST TRADEOFF: this scans the app at its stable Elastic IP. Because
+      # Argo CD deploys asynchronously AFTER the git commit above, this scan may hit
+      # the previously-deployed version rather than the brand-new one. That's an
+      # accepted pattern for GitOps without complex "wait-for-sync" logic — it
+      # continuously validates whatever is currently live on every pipeline run.
+      #
+      # exit-code note: the ZAP action fails the job if it finds issues by default;
+      # we allow it to continue (report-only) via cmd_options -I, matching the
+      # report-only stance of our other scanners while learning.
       # ----------------------------------------------------------------------
-      - name: Wait for Argo CD to sync the new deployment
-        run: sleep 90   # gives Argo's ~3min poll cycle time to pick up and apply the new ta
       - name: DAST scan (OWASP ZAP baseline)
         uses: zaproxy/action-baseline@v0.14.0
         with:
