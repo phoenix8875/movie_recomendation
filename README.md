@@ -1,4 +1,4 @@
-# 🎬 Movie Recommender — CI/CD/CD Pipeline
+# 🎬 Movie Recommender — CI/CD Pipeline
 
 [![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=phoenix8875_movie_recomendation&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=phoenix8875_movie_recomendation)
 [![Vulnerabilities](https://sonarcloud.io/api/project_badges/measure?project=phoenix8875_movie_recomendation&metric=vulnerabilities)](https://sonarcloud.io/summary/new_code?id=phoenix8875_movie_recomendation)
