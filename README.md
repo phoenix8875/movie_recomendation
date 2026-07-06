@@ -7,7 +7,7 @@
 
 A 3-tier movie recommendation app — **Nginx → FastAPI → PostgreSQL** — that
 started as a hand-deployed Docker Compose project and evolved into a fully
-automated **GitOps CI/CD/CD pipeline** on Kubernetes.
+automated **GitOps CI/CD pipeline** on Kubernetes.
 
 This README explains **how a code change turns into a running deployment,
 untouched by hand** — every pipeline stage, why it exists, and how it hands
