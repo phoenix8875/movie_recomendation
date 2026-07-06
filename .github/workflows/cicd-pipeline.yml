@@ -199,6 +199,17 @@ jobs:
           git push
 
       # ----------------------------------------------------------------------
+      # STEP 6.5: Give Argo CD a head start on syncing before we scan.
+      # Argo polls git on an interval (default ~3min) rather than instantly, so
+      # without this pause DAST would very likely hit the PREVIOUS deployment,
+      # not the one we just pushed. This is a pragmatic partial fix, not a
+      # guarantee — a fully correct fix would poll Argo's own API for
+      # Synced+Healthy before scanning, at the cost of exposing that API.
+      # ----------------------------------------------------------------------
+      - name: Wait for Argo CD to pick up and sync the new deployment
+        run: sleep 90
+
+      # ----------------------------------------------------------------------
       # STEP 7: DAST — OWASP ZAP scan of the LIVE deployed application
       # Unlike SAST/Trivy (which inspect code/images), DAST attacks the running app
       # over HTTP and reports runtime issues (missing security headers, XSS, etc.).
