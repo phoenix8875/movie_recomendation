@@ -52,7 +52,7 @@ reverse proxy, Docker DNS, request flow), see
 ║                                                                                            ║
 ║   Argo CD syncs  ──►  Helm renders chart  ──►  kubectl apply  ──►  pods roll to new image  ║
 ║   (auto + self-heal)                                                     │                 ║
-║                                                                            ▼               ║
+║                                                                          ▼                 ║
 ║                                                              ⑨ App live at :30080          ║
 ║                                                              Prometheus + Grafana watching ║
 ╚════════════════════════════════════════════════════════════════════════════════════════════╝
