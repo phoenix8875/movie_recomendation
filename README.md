@@ -27,35 +27,35 @@ reverse proxy, Docker DNS, request flow), see
        │
        ▼
 ╔══════════════════════════════ CI  —  App Repo  (GitHub Actions) ═══════════════════════════╗
-║                                                                                              ║
-║   ①LINT        ②TEST         ③SAST          ④BUILD          ⑤SCAN          ⑥DAST          ║
-║   ruff    ──►  pytest   ──►  SonarCloud ──►  Docker    ──►  Trivy     ──►  OWASP ZAP        ║
-║   style       unit tests    quality gate    build+push     image scan     live app scan     ║
-║                                                             + push SARIF                     ║
-║                                                             to Security tab                  ║
-║                                                                                              ║
+║                                                                                            ║
+║   ①LINT        ②TEST         ③SAST          ④BUILD          ⑤SCAN          ⑥DAST           ║
+║   ruff    ──►  pytest   ──►  SonarCloud ──►  Docker    ──►  Trivy     ──►  OWASP ZAP       ║
+║   style       unit tests    quality gate    build+push     image scan     live app scan    ║
+║                                                             + push SARIF                   ║
+║                                                             to Security tab                ║
+║                                                                                            ║
 ╚═══════════════════════════════════════════════════╤════════════════════════════════════════╝
                                                      │
                                           ⑦ commit new image tag
                                                      │
                                                      ▼
 ╔══════════════════════ CD (config)  —  Helm Repo  (Git = source of truth) ══════════════════╗
-║                                                                                              ║
-║           values.yaml  { backend.image.tag: "<new-sha>", frontend.image.tag: "<new-sha>" }  ║
-║                                                                                              ║
+║                                                                                            ║
+║           values.yaml  { backend.image.tag: "<new-sha>", frontend.image.tag: "<new-sha>" } ║
+║                                                                                            ║
 ╚═══════════════════════════════════════════════════╤════════════════════════════════════════╝
                                                      │
                                      ⑧ Argo CD detects the commit
                                                      │
                                                      ▼
 ╔══════════════════════ CD (deploy)  —  Kubernetes Cluster  (Argo CD) ═══════════════════════╗
-║                                                                                              ║
-║   Argo CD syncs  ──►  Helm renders chart  ──►  kubectl apply  ──►  pods roll to new image   ║
-║   (auto + self-heal)                                                     │                  ║
-║                                                                            ▼                 ║
-║                                                              ⑨ App live at :30080            ║
-║                                                              Prometheus + Grafana watching    ║
-╚══════════════════════════════════════════════════════════════════════════════════════════════╝
+║                                                                                            ║
+║   Argo CD syncs  ──►  Helm renders chart  ──►  kubectl apply  ──►  pods roll to new image  ║
+║   (auto + self-heal)                                                     │                 ║
+║                                                                            ▼               ║
+║                                                              ⑨ App live at :30080          ║
+║                                                              Prometheus + Grafana watching ║
+╚════════════════════════════════════════════════════════════════════════════════════════════╝
 ```
 
 **Why "CI/CD/CD"?** Continuous **Integration** (build & verify), continuous
@@ -72,13 +72,13 @@ The pipeline deliberately spans **two repositories** — this is the standard
 
 ```
 ┌─────────────────────────────┐         commits          ┌──────────────────────────────┐
-│   movie-recomendation        │   the new image tag      │  helm-chart-based-deployment  │
-│   (this repo — the CODE)     │ ────────────────────────► │  (the DEPLOY CONFIG)          │
-│                               │                           │                                │
-│   • Dockerfiles               │                           │   • Helm chart                │
-│   • FastAPI + Nginx source    │                           │   • values.yaml                │
-│   • GitHub Actions workflow   │                           │   • SealedSecrets              │
-└─────────────────────────────┘                           └───────────────┬────────────────┘
+│   movie-recomendation       │   the new image tag      │  helm-chart-based-deployment │
+│   (this repo — the CODE)    │ ────────────────────────►│  (the DEPLOY CONFIG)         │
+│                             │                          │                              │
+│   • Dockerfiles             │                          │   • Helm chart               │
+│   • FastAPI + Nginx source  │                          │   • values.yaml              │
+│   • GitHub Actions workflow │                          │   • SealedSecrets            │
+└─────────────────────────────┘                          └──────────────────┬───────────┘
                                                                             │
                                                                   watched by Argo CD
                                                                             │
@@ -153,9 +153,9 @@ continuous integration:
         │  pushed to helm-chart-based-deployment
         ▼
   ┌─────────────────┐        polls / watches        ┌─────────────────────┐
-  │  values.yaml     │ ◄───────────────────────────  │  Application         │
-  │  tag: "a1b2c3d"  │                                │  (Argo CD resource)  │
-  └─────────────────┘                                └──────────┬──────────┘
+  │  values.yaml    │ ◄───────────────────────────  │  Application        │
+  │  tag: "a1b2c3d" │                               │  (Argo CD resource) │
+  └─────────────────┘                               └──────────┬──────────┘
                                                                   │  detects the new commit
                                                                   ▼
                                                        helm template (renders chart)
