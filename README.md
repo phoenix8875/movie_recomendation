@@ -108,6 +108,32 @@ Each stage runs on a fresh GitHub-hosted VM and must pass before the next one st
 | ⑥ | **DAST** | OWASP ZAP | Attacks the *live running app* over HTTP — missing security headers, XSS surface, etc. | Reports only |
 | ⑦ | **Deploy Trigger** | `yq` + `git push` | Rewrites the image tag in the Helm repo's `values.yaml` and commits | This commit *is* the deploy signal |
 
+---
+
+## ☸️ Try It Yourself on AWS EKS (Terraform)
+
+Want to run this whole stack on a **real managed Kubernetes cluster** instead of
+k3s? There's a companion Terraform repo that provisions everything on **Amazon
+EKS** — the cluster, worker nodes, Argo CD, and CloudWatch monitoring — and
+deploys this app end to end, giving you a live URL:
+
+**👉 [EKS Implementation with Terraform](https://github.com/phoenix8875/EKS_Implementation_with_teraform.git)**
+
+It provisions:
+- A VPC across 2 AZs + a managed EKS cluster and node group (an Auto Scaling Group under the hood)
+- The EBS CSI driver for Postgres storage on EKS
+- **Argo CD** installed in-cluster, syncing this app from the Helm repo — the
+  same GitOps flow, unchanged
+- **CloudWatch** alarms (node health / scaling) + an **AWS Budgets** cost guard
+
+Two `terraform apply` runs → a running app at `http://<node-ip>:30080`. Full
+setup steps, a file-by-file breakdown, and the "why two folders" explanation are
+in that repo's README.
+
+> **Note:** the EKS build swaps a few things from the k3s setup described below —
+> managed control plane instead of the k3s join dance, **CloudWatch** in place of
+> Prometheus/Grafana, and plain Kubernetes Secrets instead of SealedSecrets.
+
 ### Why three different security tools?
 
 Each one inspects the application at a **different layer** — none of them
