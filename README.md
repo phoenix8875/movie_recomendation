@@ -105,9 +105,8 @@ Each stage runs on a fresh GitHub-hosted VM and must pass before the next one st
 | ③ | **SAST** | SonarCloud | Reads the *source code* for bugs, code smells, security hotspots | **Pipeline stops** if the Quality Gate is red |
 | ④ | **Build & Push** | Docker Buildx | Builds backend + frontend images, tags each with the **git commit SHA** | Build errors stop the pipeline |
 | ⑤ | **Image Scan** | Trivy | Scans the *built image's* OS/library packages for known CVEs → SARIF → Security tab | Reports only (HIGH/CRITICAL surfaced, doesn't block) |
-| ⑥ | **DAST** | OWASP ZAP | Attacks the *live running app* over HTTP — missing security headers, XSS surface, etc. | Reports only |
-| ⑦ | **Deploy Trigger** | `yq` + `git push` | Rewrites the image tag in the Helm repo's `values.yaml` and commits | This commit *is* the deploy signal |
-
+| ⑥  | **Deploy Trigger** | `yq` + `git push` | Rewrites the image tag in the Helm repo's `values.yaml` and commits | This commit *is* the deploy signal |
+| ⑦ | **DAST** | OWASP ZAP | Attacks the *live running app* over HTTP — missing security headers, XSS surface, etc. | Reports only |
 ---
 
 ## ☸️ Try It Yourself on AWS EKS (Terraform)
